@@ -1,4 +1,9 @@
 defmodule Exkiq.Worker do
+  @moduledoc """
+  This is used in a jobs module, recommended to be placed in
+  lib/jobs.  The jobs module should use Exkiq.Worker and should
+  implement a perform function either with or without parameters.
+  """
   defmacro __using__(opts \\ []) do
     quote do
       def perform([]) do
