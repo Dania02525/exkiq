@@ -1,76 +1,78 @@
 defmodule Exkiq.Store do
-  use GenStage
+  use GenServer
 
   # API
 
   def start_link(queue) do
-    GenStage.start_link(__MODULE__, :ok, name: queue)
-  end
-
-  def init(_) do
-    {:producer, {:queue.new(), 0}}
+    GenServer.start_link(__MODULE__, :queue.new, name: queue)
   end
 
   def enqueue(job, queue) do
-    GenStage.cast(queue, {:enqueue, job})
+    GenServer.call(queue, {:enqueue, job})
   end
 
   def enqueue_in(job, minutes, queue) do
     Process.send_after(queue, {{:enqueue, job}, queue}, minutes * 1000)
   end
 
-  def count(queue) do
-    GenStage.call(queue, :count)
+  def out(queue) do
+    GenServer.call(queue, :out)
+  end
+
+  def dump(queue) do
+    GenServer.call(queue, :dump)
+  end
+
+  def flush(queue) do
+    GenServer.call(queue, :flush)
   end
 
   # Server
 
-  def handle_call(:count, _from, {jobs, demand}) do
-    {:reply, :queue.len(jobs), [], {jobs, demand}}
+  def handle_call(:flush, _from, _jobs) do
+    :c.flush()
+    {:reply, :ok, :queue.new}
   end
 
-  def handle_cast({:enqueue, job}, {jobs, demand}) do
-    send_jobs({:queue.in(job, jobs), demand}, [])
+  def handle_call(:dump, _from, jobs) do
+    {dump, _reverse} = jobs
+    {:reply, dump, jobs}
   end
 
-  def handle_cast({:dequeue, job}, {jobs, demand}) do
-    {l1, l2} = jobs
-    new_jobs = {List.delete(l1, job), List.delete(l2, job)}
-    {:noreply, [], {new_jobs, demand}}
+  def handle_call({:enqueue, job}, _from, jobs) do
+    {:reply, :ok, :queue.in(job, jobs)}
   end
 
-  def handle_info({{:enqueue, job}, queue}, {jobs, demand}) do
-    GenStage.cast(queue, {:enqueue, job})
-    {:noreply, [], {jobs, demand}}
-  end
-
-  def handle_info(message, {jobs, demand}) do
-    IO.puts "Unhandled message received: #{inspect message} in #{queue_name}"
-    {:noreply, [], {jobs, demand}}
-  end
-
-  def handle_demand(new_demand, {jobs, demand}) do
-    send_jobs({jobs, new_demand + demand}, [])
-  end
-
-  defp send_jobs({jobs, 0}, jobs_to_run) do
-    {:noreply, jobs_to_run, {jobs, 0}}
-  end
-
-  defp send_jobs({jobs, demand}, jobs_to_run) do
+  def handle_call(:out, _from, jobs) do
     case :queue.out(jobs) do
-      {{_val, job}, new_jobs} ->
-        GenStage.cast(:running, {:enqueue, job})
-        send_jobs({new_jobs, demand - 1}, [ job | jobs_to_run ])
+      {{_val, job}, remaining_jobs} ->
+        {:reply, job, remaining_jobs}
       {:empty, jobs} ->
-        {:noreply, jobs_to_run, {jobs, demand}}
+        {:reply, :empty, jobs}
     end
   end
 
-  defp queue_name do
-    case Process.info(self(), :registered_name) do
-      {_, []}   -> self()
-      {_, name} -> name
+  def handle_call({:monitor, pid, job}, _from, jobs) do
+    job = %{ job | ref: Process.monitor(pid) }
+    {:reply, :ok, :queue.in(job, jobs)}
+  end
+
+  def handle_info({:DOWN, ref, _, _, reason}, jobs) do
+    {list, reversed} = jobs
+    job = Enum.find(list, fn(j) -> j.ref == ref end)
+    cond do
+      reason == :normal ->
+        Exkiq.Store.enqueue(%{ job | ref: nil }, :succeeded)
+      job.retries == 0 ->
+        Exkiq.Store.enqueue(%{ job | ref: nil }, :failed)
+      true ->
+        Exkiq.Store.enqueue(%{ job | ref: nil }, :retry)
     end
+    {:noreply, {Enum.reject(list, fn(j) -> j.ref == ref end), Enum.reject(reversed, fn(j) -> j.ref == ref end)}}
+  end
+
+  def handle_info({{:enqueue, job}, queue}, jobs) do
+    GenServer.call(queue, {:enqueue, job})
+    {:noreply, jobs}
   end
 end

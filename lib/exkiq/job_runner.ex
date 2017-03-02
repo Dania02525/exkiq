@@ -1,17 +1,11 @@
 defmodule Exkiq.JobRunner do
   def start_link(job) do
     Task.start_link(fn ->
+      GenServer.call(:running, {:monitor, self(), job})
       try do
         apply(job.module, :perform, job.params)
       rescue
-        _ ->
-          cond do
-            job.retries == 0 -> GenStage.cast(:failed, {:enqueue, job})
-            true -> GenStage.cast(:retry, {:enqueue, job})
-          end
-      after
-        GenStage.cast(:running, {:dequeue, job})
-        Process.exit(self, :normal)
+        e -> Process.exit(self(), :error)
       end
     end)
   end

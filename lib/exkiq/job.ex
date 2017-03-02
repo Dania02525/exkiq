@@ -4,8 +4,6 @@ defmodule Exkiq.Job do
     module: nil,
     params: [],
     retries: 5,
-    queue: :default,
-    status: :queued,
-    timestamp: 0
+    ref: nil
   ]
 end

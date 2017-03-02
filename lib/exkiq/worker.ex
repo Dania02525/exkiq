@@ -7,7 +7,7 @@ defmodule Exkiq.Worker do
   defmacro __using__(opts \\ []) do
     quote do
       def perform([]) do
-        perform
+        perform()
       end
 
       def perform_async(params \\ []) do
@@ -20,8 +20,8 @@ defmodule Exkiq.Worker do
 
       def job(params) do
         %{module: __MODULE__,
-          retries: retries,
-          queue: queue,
+          retries: retries(),
+          queue: queue(),
           params: params
         }
       end

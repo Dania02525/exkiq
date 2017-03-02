@@ -7,11 +7,10 @@ defmodule Exkiq.JobSupervisor do
     ]
 
     ConsumerSupervisor.start_link(children, strategy: :one_for_one,
-                                            subscribe_to: Exkiq.proccessable_queues,
+                                            subscribe_to: [{Exkiq.JobAggregator, max_demand: concurrency() + 1}],
                                             max_restarts: 0,
-                                            max_dynamic: concurrency,
                                             name: __MODULE__)
-    {:ok, self}
+    {:ok, self()}
   end
 
   def init(_arg) do

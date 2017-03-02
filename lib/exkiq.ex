@@ -4,33 +4,44 @@ defmodule Exkiq do
     import Supervisor.Spec, warn: false
 
     workers =
-      registered_queues
+      queues()
       |> Enum.map(fn(queue) ->
         worker(Exkiq.Store, [queue], [id: queue])
       end)
 
-    children = Enum.reverse([supervisor(Exkiq.JobSupervisor, []) | workers ])
+    job_managers =
+      [supervisor(Exkiq.JobSupervisor, []), worker(Exkiq.JobAggregator, [], [])]
+
+    children = Enum.reverse(job_managers ++ workers)
 
     opts = [strategy: :one_for_one, name: Exkiq.Supervisor]
     Supervisor.start_link(children, opts)
   end
 
-  def registered_queues do
-    user_defined = Application.get_env(:exkiq, :queues) || []
-    [:default, :running, :retry, :failed] ++ user_defined
+  def queues do
+    static_queues() ++ processable_queues()
   end
 
-  def proccessable_queues do
-    registered_queues
-    |> Enum.reject(fn(queue)->
-      queue == :running || queue == :failed
-    end)
+  def static_queues do
+    [:running, :failed, :succeeded]
+  end
+
+  def processable_queues do
+    user_defined = Application.get_env(:exkiq, :queues) || []
+    [:default, :retry] ++ user_defined
   end
 
   def stats do
-    registered_queues
+    queues()
     |> Enum.reduce(%{}, fn(queue, acc) ->
-      Map.put(acc, queue, Exkiq.Store.count(queue))
+      Map.put(acc, queue, Exkiq.Store.dump(queue) |> Enum.count)
+    end)
+  end
+
+  def dump do
+    queues()
+    |> Enum.reduce(%{}, fn(queue, acc) ->
+      Map.put(acc, queue, Exkiq.Store.dump(queue))
     end)
   end
 
