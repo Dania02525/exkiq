@@ -1,6 +1,17 @@
 # Exkiq
 
-**Heavily Sidekiq inspired async job runner for elixir**
+**Heavily Sidekiq inspired distributed async job runner for elixir**
+
+When other nodes are connected to an application using Exkiq, the queues are replicated across nodes, and
+calls to enqueue jobs are multi-called across nodes to keep in sync.  A master is elected, through which all
+consumer supervisors subscribe via the globally registered `Exkiq.JobAggregator` pid.  This means that workload
+is distributed across nodes, while consistency and source of truth is maintained through the master.
+
+When a new node joins, the `Exkiq.JobAggregator` registered name is resolved by choosing a master or assigning
+to current master node.
+
+When/if the master node goes down, a monitor detects the missing master and elects a new master from the group,
+to which the `Exkiq.JobAggregator` process name will point and all consumer supervisors will re subscribe to.
 
 ## Installation
 

@@ -2,7 +2,20 @@ defmodule Exkiq.JobAggregator do
   use GenStage
 
   def start_link do
-    GenStage.start_link(__MODULE__, :ok, name: __MODULE__)
+    IO.puts "starting JobAggregator"
+    case :global.whereis_name(Exkiq.JobAggregator) do
+      :undefined ->
+        {:ok, pid} = GenStage.start_link(__MODULE__, :ok)
+        :global.register_name(__MODULE__, pid, fn(_name, pid1, pid2)->
+          cond do
+            Exkiq.master? -> pid2
+            true -> pid1
+          end
+        end)
+        {:ok, pid}
+      pid ->
+        {:ok, pid}
+    end
   end
 
   def init(_args) do

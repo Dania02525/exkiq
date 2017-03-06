@@ -7,7 +7,7 @@ defmodule Exkiq.JobSupervisor do
     ]
 
     ConsumerSupervisor.start_link(children, strategy: :one_for_one,
-                                            subscribe_to: [{Exkiq.JobAggregator, max_demand: concurrency() + 1}],
+                                            subscribe_to: [{producer(), max_demand: concurrency() + 1}],
                                             max_restarts: 0,
                                             name: __MODULE__)
     {:ok, self()}
@@ -17,7 +17,11 @@ defmodule Exkiq.JobSupervisor do
     {:consumer, :ok}
   end
 
-  def concurrency do
+  defp concurrency do
     Application.get_env(:exkiq, :concurrency) || 10
+  end
+
+  defp producer do
+    :global.whereis_name(Exkiq.JobAggregator)
   end
 end

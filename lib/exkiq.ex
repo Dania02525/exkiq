@@ -9,10 +9,10 @@ defmodule Exkiq do
         worker(Exkiq.Store, [queue], [id: queue])
       end)
 
-    job_managers =
-      [supervisor(Exkiq.JobSupervisor, []), worker(Exkiq.JobAggregator, [], [])]
+    job_manager =
+      supervisor(Exkiq.JobManagerSupervisor, [])
 
-    children = Enum.reverse(job_managers ++ workers)
+    children = Enum.reverse([job_manager | workers])
 
     opts = [strategy: :one_for_one, name: Exkiq.Supervisor]
     Supervisor.start_link(children, opts)
@@ -49,7 +49,28 @@ defmodule Exkiq do
     Exkiq.Store.enqueue(job, queue)
   end
 
-  def enqueue_in(job, minutes, queue \\ :default) do
-    Exkiq.Store.enqueue_in(job, minutes, queue)
+  def master? do
+    Node.self() == master()
+  end
+
+  def master do
+    sorted_nodelist()
+    |> List.first
+  end
+
+  def sorted_nodelist do
+    [ Node.self() | Node.list() ]
+    |> Enum.sort
+  end
+
+  def nodelist_index do
+    Enum.find_index(sorted_nodelist(), fn(e) -> e == Node.self() end)
+  end
+
+  def next_node do
+    case Enum.at(sorted_nodelist(), nodelist_index() + 1) do
+      nil -> master()
+      node -> node
+    end
   end
 end

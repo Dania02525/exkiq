@@ -5,7 +5,7 @@ defmodule Exkiq.JobRunner do
       try do
         apply(job.module, :perform, job.params)
       rescue
-        e -> Process.exit(self(), :error)
+        _ -> Process.exit(self(), :error)
       end
     end)
   end

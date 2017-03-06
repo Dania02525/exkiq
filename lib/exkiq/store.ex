@@ -8,23 +8,38 @@ defmodule Exkiq.Store do
   end
 
   def enqueue(job, queue) do
-    GenServer.call(queue, {:enqueue, job})
+    GenServer.multi_call(queue, {:enqueue, job})
   end
 
-  def enqueue_in(job, minutes, queue) do
-    Process.send_after(queue, {{:enqueue, job}, queue}, minutes * 1000)
-  end
-
+  # master only
   def out(queue) do
-    GenServer.call(queue, :out)
+    # get the next job from the master
+    case GenServer.call(queue, :out) do
+      :empty -> :empty
+      job ->
+        sync(queue)
+        job
+    end
   end
 
   def dump(queue) do
+    # just dump the local queue
     GenServer.call(queue, :dump)
   end
 
   def flush(queue) do
-    GenServer.call(queue, :flush)
+    GenServer.multi_call(queue, :flush)
+  end
+
+  # master only
+  def sync(queue) do
+    cond do
+      Exkiq.master?() ->
+        GenServer.cast(queue, {:sync, queue, []})
+      true ->
+        IO.puts "WARNING: sync called on #{inspect Node.self()}, aborting sync"
+        :ok
+    end
   end
 
   # Server
@@ -57,6 +72,19 @@ defmodule Exkiq.Store do
     {:reply, :ok, :queue.in(job, jobs)}
   end
 
+  def handle_cast({:sync, queue, node_jobs}, state) do
+    {jobs, _reversed} = state
+    case Exkiq.next_node do
+      nil ->
+        {:noreply, merge_jobs_into_queue(node_jobs, jobs)}
+      node ->
+         new_jobs = merge_jobs_into_queue(node_jobs, jobs)
+        # send the aggregated uniq jobs to the next node
+        GenServer.cast({node, queue}, {:sync, queue, new_jobs})
+        {:noreply, new_jobs}
+    end
+  end
+
   def handle_info({:DOWN, ref, _, _, reason}, jobs) do
     {list, reversed} = jobs
     job = Enum.find(list, fn(j) -> j.ref == ref end)
@@ -71,8 +99,10 @@ defmodule Exkiq.Store do
     {:noreply, {Enum.reject(list, fn(j) -> j.ref == ref end), Enum.reject(reversed, fn(j) -> j.ref == ref end)}}
   end
 
-  def handle_info({{:enqueue, job}, queue}, jobs) do
-    GenServer.call(queue, {:enqueue, job})
-    {:noreply, jobs}
+  defp merge_jobs_into_queue(node_jobs, jobs) do
+    (node_jobs ++ jobs)
+    |> Enum.reduce(:queue.new(), fn(job, acc)->
+      :queue.in(job, acc)
+    end)
   end
 end
