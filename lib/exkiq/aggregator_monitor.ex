@@ -12,6 +12,7 @@ defmodule Exkiq.AggregatorMonitor do
 
   def handle_info(:check_status, state) do
     state = check_status(state)
+    run_at_interval()
     {:noreply, state}
   end
 
@@ -34,6 +35,5 @@ defmodule Exkiq.AggregatorMonitor do
       true ->
         pid
     end
-    run_at_interval()
   end
 end
