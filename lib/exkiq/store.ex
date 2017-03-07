@@ -69,7 +69,7 @@ defmodule Exkiq.Store do
       true ->
         Exkiq.Store.enqueue(%{ job | ref: nil }, :retry)
     end
-    {:noreply, {Enum.reject(list, fn(j) -> j.ref == ref end), Enum.reject(reversed, fn(j) -> j.ref == ref end)}}
+    {:noreply, {Enum.reject(list, fn(j) -> j.ref == ref end), Enum.reject(rev, fn(j) -> j.ref == ref end)}}
   end
 
   def handle_info({{:enqueue, job}, queue}, jobs) do
