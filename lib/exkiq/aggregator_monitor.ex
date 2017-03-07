@@ -21,16 +21,10 @@ defmodule Exkiq.AggregatorMonitor do
   end
 
   defp check_status(pid) do
-    cond do
-      :global.whereis_name(Exkiq.JobAggregator) == :undefined ->
-        restart_aggregator()
-        restart_job_manager()
-      :global.whereis_name(Exkiq.JobAggregator) != pid ->
-        restart_job_manager()
-      true ->
-        nil
+    case :global.whereis_name(Exkiq.JobAggregator) do
+      :undefined -> restart_aggregator
+      pid -> pid
     end
-    :global.whereis_name(Exkiq.JobAggregator)
   end
 
   defp restart_aggregator do
