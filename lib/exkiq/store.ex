@@ -67,7 +67,7 @@ defmodule Exkiq.Store do
       job.retries == 0 ->
         Exkiq.Store.enqueue(%{ job | ref: nil }, :failed)
       true ->
-        Exkiq.Store.enqueue(%{ job | ref: nil }, :retry)
+        Exkiq.Store.enqueue(%{ job | ref: nil, retries: job.retries - 1 }, :retry)
     end
     {:noreply, {Enum.reject(list, fn(j) -> j.ref == ref end), Enum.reject(rev, fn(j) -> j.ref == ref end)}}
   end

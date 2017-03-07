@@ -10,12 +10,16 @@ defmodule Exkiq.Worker do
         perform()
       end
 
-      def perform_async(params \\ []) do
-        Exkiq.enqueue(struct(Exkiq.Job, job(params)))
+      def perform_async do
+        Exkiq.enqueue(struct(Exkiq.Job, job([])))
       end
 
-      def perform_in(minutes, params) do
-        Exkiq.enqueue_in(struct(Exkiq.Job, job(params)), minutes)
+      def perform_async(param) do
+        Exkiq.enqueue(struct(Exkiq.Job, job([param])))
+      end
+
+      def perform_async(param1, param2) do
+        Exkiq.enqueue(struct(Exkiq.Job, job([param1, param2])))
       end
 
       def job(params) do
