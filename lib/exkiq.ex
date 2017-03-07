@@ -53,7 +53,7 @@ defmodule Exkiq do
     Exkiq.Store.enqueue_in(job, minutes, queue)
   end
 
-  def master?
+  def master? do
     true
   end
 end
