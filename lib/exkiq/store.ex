@@ -71,6 +71,24 @@ defmodule Exkiq.Store do
     end
   end
 
+  def handle_call({:handle_job_exit, ref, reason}, _from, state) do
+    {list, rev} = state
+    job = Enum.find(list, fn(j) -> j.ref == ref end) || Enum.find(rev, fn(j) -> j.ref == ref end)
+    new_state =
+      case {job, reason} do
+        {nil, _} ->
+          Exkiq.Store.enqueue(%{ job | ref: nil }, :succeeded)
+          state
+        {job, :normal} ->
+          Exkiq.Store.enqueue(%{ job | ref: nil }, :failed)
+          {Enum.reject(list, fn(j) -> j.ref == ref end), Enum.reject(rev, fn(j) -> j.ref == ref end)}
+        {job, _} ->
+          Exkiq.Store.enqueue(%{ job | ref: nil, retries: job.retries - 1 }, :retry)
+          {Enum.reject(list, fn(j) -> j.ref == ref end), Enum.reject(rev, fn(j) -> j.ref == ref end)}
+      end
+    {:reply, :ok, new_state}
+  end
+
   def handle_call({:monitor, ref, job}, _from, jobs) do
     job = %{ job | ref: ref }
     GenServer.abcast(:running, {:monitor, ref, job})
@@ -96,26 +114,8 @@ defmodule Exkiq.Store do
     end
   end
 
-  def handle_cast({:handle_job_exit, ref, reason}, state) do
-    {list, rev} = state
-    job = Enum.find(list, fn(j) -> j.ref == ref end) || Enum.find(rev, fn(j) -> j.ref == ref end)
-    new_state =
-      case {job, reason} do
-        {nil, _} ->
-          Exkiq.Store.enqueue(%{ job | ref: nil }, :succeeded)
-          state
-        {job, :normal} ->
-          Exkiq.Store.enqueue(%{ job | ref: nil }, :failed)
-          {Enum.reject(list, fn(j) -> j.ref == ref end), Enum.reject(rev, fn(j) -> j.ref == ref end)}
-        {job, _} ->
-          Exkiq.Store.enqueue(%{ job | ref: nil, retries: job.retries - 1 }, :retry)
-          {Enum.reject(list, fn(j) -> j.ref == ref end), Enum.reject(rev, fn(j) -> j.ref == ref end)}
-      end
-    {:noreply, new_state}
-  end
-
   def handle_info({:DOWN, ref, _, _, reason}, state) do
-    GenServer.abcast(:running, {:handle_job_exit, ref, reason})
+    GenServer.multi_call(:running, {:handle_job_exit, ref, reason})
     {:noreply, state}
   end
 
