@@ -52,4 +52,8 @@ defmodule Exkiq do
   def enqueue_in(job, minutes, queue \\ :default) do
     Exkiq.Store.enqueue_in(job, minutes, queue)
   end
+
+  def master?
+    true
+  end
 end
