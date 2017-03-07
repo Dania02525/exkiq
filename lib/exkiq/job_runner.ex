@@ -1,7 +1,7 @@
 defmodule Exkiq.JobRunner do
   def start_link(job) do
     Task.start_link(fn ->
-      GenServer.call(:running, {:monitor, self(), job})
+      Exkiq.Store.monitor(job, Process.monitor(self()))
       try do
         apply(job.module, :perform, job.params)
       rescue

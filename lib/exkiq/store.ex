@@ -11,6 +11,10 @@ defmodule Exkiq.Store do
     GenServer.multi_call(queue, {:enqueue, job})
   end
 
+  def monitor(job, ref) do
+    GenServer.abcast(:running, {:monitor, ref, job})
+  end
+
   # master only
   def out(queue) do
     # get the next job from the master
@@ -50,8 +54,8 @@ defmodule Exkiq.Store do
   end
 
   def handle_call(:dump, _from, jobs) do
-    {dump, _reverse} = jobs
-    {:reply, dump, jobs}
+    {dump, reverse} = jobs
+    {:reply, Enum.uniq(dump ++ reverse), jobs}
   end
 
   def handle_call({:enqueue, job}, _from, jobs) do
@@ -67,13 +71,14 @@ defmodule Exkiq.Store do
     end
   end
 
-  def handle_call({:monitor, pid, job}, _from, jobs) do
-    job = %{ job | ref: Process.monitor(pid) }
-    {:reply, :ok, :queue.in(job, jobs)}
+  def handle_cast({:monitor, ref, job}, jobs) do
+    job = %{ job | ref: ref }
+    {:noreply, :queue.in(job, jobs)}
   end
 
   def handle_cast({:sync, queue, node_jobs}, state) do
-    {jobs, _reversed} = state
+    {list, rev} = state
+    jobs = Enum.uniq(list ++ rev)
     case Exkiq.next_node do
       nil ->
         {:noreply, merge_jobs_into_queue(node_jobs, jobs)}
@@ -85,18 +90,27 @@ defmodule Exkiq.Store do
     end
   end
 
-  def handle_info({:DOWN, ref, _, _, reason}, jobs) do
-    {list, reversed} = jobs
-    job = Enum.find(list, fn(j) -> j.ref == ref end)
-    cond do
-      reason == :normal ->
-        Exkiq.Store.enqueue(%{ job | ref: nil }, :succeeded)
-      job.retries == 0 ->
-        Exkiq.Store.enqueue(%{ job | ref: nil }, :failed)
-      true ->
-        Exkiq.Store.enqueue(%{ job | ref: nil }, :retry)
-    end
-    {:noreply, {Enum.reject(list, fn(j) -> j.ref == ref end), Enum.reject(reversed, fn(j) -> j.ref == ref end)}}
+  def handle_cast({:handle_job_exit, ref, reason}, state) do
+    {list, rev} = state
+    job = Enum.find(list, fn(j) -> j.ref == ref end) || Enum.find(rev, fn(j) -> j.ref == ref end)
+    new_state =
+      case {job, reason} do
+        {nil, _} ->
+          Exkiq.Store.enqueue(%{ job | ref: nil }, :succeeded)
+          state
+        {job, :normal} ->
+          Exkiq.Store.enqueue(%{ job | ref: nil }, :failed)
+          {Enum.reject(list, fn(j) -> j.ref == ref end), Enum.reject(rev, fn(j) -> j.ref == ref end)}
+        {job, _} ->
+          Exkiq.Store.enqueue(%{ job | ref: nil, retries: job.retries - 1 }, :retry)
+          {Enum.reject(list, fn(j) -> j.ref == ref end), Enum.reject(rev, fn(j) -> j.ref == ref end)}
+      end
+    {:noreply, new_state}
+  end
+
+  def handle_info({:DOWN, ref, _, _, reason}, state) do
+    GenServer.abcast(:running, {:handle_job_exit, ref, reason})
+    {:noreply, state}
   end
 
   defp merge_jobs_into_queue(node_jobs, jobs) do

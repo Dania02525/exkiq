@@ -23,17 +23,23 @@ defmodule Exkiq.AggregatorMonitor do
   defp check_status(pid) do
     cond do
       :global.whereis_name(Exkiq.JobAggregator) == :undefined ->
-        Supervisor.terminate_child(Exkiq.JobManagerSupervisor, :aggregator)
-        Supervisor.restart_child(Exkiq.JobManagerSupervisor, :aggregator)
-        Supervisor.terminate_child(Exkiq.JobManagerSupervisor, Exkiq.JobSupervisor)
-        Supervisor.restart_child(Exkiq.JobManagerSupervisor, Exkiq.JobSupervisor)
-        :global.whereis_name(Exkiq.JobAggregator)
+        restart_aggregator()
+        restart_job_manager()
       :global.whereis_name(Exkiq.JobAggregator) != pid ->
-        Supervisor.terminate_child(Exkiq.JobManagerSupervisor, Exkiq.JobSupervisor)
-        Supervisor.restart_child(Exkiq.JobManagerSupervisor, Exkiq.JobSupervisor)
-        :global.whereis_name(Exkiq.JobAggregator)
+        restart_job_manager()
       true ->
-        pid
+        nil
     end
+    :global.whereis_name(Exkiq.JobAggregator)
+  end
+
+  defp restart_aggregator do
+    Supervisor.terminate_child(Exkiq.JobManagerSupervisor, :aggregator)
+    Supervisor.restart_child(Exkiq.JobManagerSupervisor, :aggregator)
+  end
+
+  defp restart_job_manager do
+    Supervisor.terminate_child(Exkiq.JobManagerSupervisor, Exkiq.JobSupervisor)
+    Supervisor.restart_child(Exkiq.JobManagerSupervisor, Exkiq.JobSupervisor)
   end
 end

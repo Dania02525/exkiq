@@ -2,7 +2,6 @@ defmodule Exkiq.JobAggregator do
   use GenStage
 
   def start_link do
-    IO.puts "starting JobAggregator"
     case :global.whereis_name(Exkiq.JobAggregator) do
       :undefined ->
         {:ok, pid} = GenStage.start_link(__MODULE__, :ok)
