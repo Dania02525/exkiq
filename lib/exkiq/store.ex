@@ -73,7 +73,13 @@ defmodule Exkiq.Store do
 
   def handle_call({:monitor, ref, job}, _from, jobs) do
     job = %{ job | ref: ref }
+    GenServer.abcast(:running, {:monitor, ref, job})
     {:reply, :ok, :queue.in(job, jobs)}
+  end
+
+  def handle_cast({:monitor, ref, job}, jobs) do
+    job = %{ job | ref: ref }
+    {:noreply, :queue.in(job, jobs)}
   end
 
   def handle_cast({:sync, queue, node_jobs}, state) do
