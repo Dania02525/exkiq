@@ -16,13 +16,20 @@ defmodule Exkiq.AggregatorMonitor do
     {:noreply, state}
   end
 
+  def handle_info(:restart_job_manager, state) do
+    restart_job_manager
+    {:noreply, state}
+  end
+
   defp run_at_interval do
     Process.send_after(self(), :check_status, 2000)
   end
 
   defp check_status(pid) do
     case :global.whereis_name(Exkiq.JobAggregator) do
-      :undefined -> restart_aggregator
+      :undefined ->
+        restart_aggregator
+        Process.send_after(self(), :restart_job_manager, 2000)
       pid -> pid
     end
   end
