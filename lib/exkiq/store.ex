@@ -35,8 +35,8 @@ defmodule Exkiq.Store do
   end
 
   def handle_call(:dump, _from, jobs) do
-    {dump, _reverse} = jobs
-    {:reply, dump, jobs}
+    {dump, reverse} = jobs
+    {:reply, Enum.uniq(dump ++ reverse), jobs}
   end
 
   def handle_call({:enqueue, job}, _from, jobs) do
@@ -58,8 +58,9 @@ defmodule Exkiq.Store do
   end
 
   def handle_info({:DOWN, ref, _, _, reason}, jobs) do
-    {list, reversed} = jobs
-    job = Enum.find(list, fn(j) -> j.ref == ref end)
+    {list, rev} = jobs
+    job = Enum.find(list, fn(j) -> j.ref == ref end) || Enum.find(rev, fn(j) -> j.ref == ref end)
+
     cond do
       reason == :normal ->
         Exkiq.Store.enqueue(%{ job | ref: nil }, :succeeded)
