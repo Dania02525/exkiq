@@ -6,10 +6,6 @@ defmodule Exkiq.Worker do
   """
   defmacro __using__(opts \\ []) do
     quote do
-      def perform([]) do
-        perform()
-      end
-
       def perform_async do
         Exkiq.enqueue(struct(Exkiq.Job, job([])))
       end
@@ -37,8 +33,6 @@ defmodule Exkiq.Worker do
       def retries do
         unquote(opts[:retries] || 5)
       end
-
-      defoverridable [perform: 1]
     end
   end
 end
